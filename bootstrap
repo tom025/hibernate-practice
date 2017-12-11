@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+
+set -e
+
+POSTGRES_BIN=/Applications/Postgres.app/Contents/Versions/latest/bin
+LOCAL_BIN=/usr/local/bin
+PATH=$POSTGRES_BIN:$LOCAL_BIN:$PATH
+: ${PGDATA=/usr/local/var/postgres}
+: ${DBNAME=hibernate-practice}
+
+function ensure_macOS {
+  if [[ $(uname -s) != 'Darwin' ]]; then
+    echo 'This only works on a macOS system'
+    exit 1
+  fi
+}
+
+function refresh_path {
+    hash -r
+}
+
+function generate_password {
+  env LC_CTYPE=C tr -dc "a-zA-Z0-9-_\$\?" < /dev/urandom | head -c 64
+}
+
+function cask_install {
+  local name=$1
+  if brew cask ls --versions $name > /dev/null; then
+    echo "Brew cask \"$name\" is already installed"
+  else
+    brew cask install $name
+    refresh_path
+  fi
+}
+
+function initialize_postgres {
+  if [[ -d $PGDATA ]]; then
+    echo "Postgres already initialized in $PGDATA"
+    return 0
+  fi
+
+  local password=$(generate_password)
+
+  echo "$password" > .postgrespw
+
+  mkdir -p src/test/resources
+  echo "spring.datasource.password=$password" > src/test/resources/dbpassword.properties
+
+  initdb \
+    --auth=password \
+    --auth-local=trust \
+    --auth-host=password \
+    --username=postgres \
+    --pwfile=.postgrespw \
+    --pgdata=$PGDATA
+}
+
+function postgres_already_loaded {
+  launchctl list | grep org.postgres > /dev/null
+}
+
+function postgres_pid {
+  launchctl list | grep org.postgres | awk '{ print $1 }'
+}
+
+function start_postgres {
+  if postgres_already_loaded; then
+    echo 'Postgres is already loaded in launchctl'
+  else
+    echo 'Loading postgres into launchctl'
+    launchctl load -w ./org.postgres.plist
+  fi
+
+  local postgres_pid=$(postgres_pid)
+  if [[ $postgres_pid != '-' ]]; then
+    echo "Postgres is already running with pid: $postgres_pid"
+    return 0
+  fi
+
+  echo 'Postgres is not running'
+  echo
+  echo 'This is often due to the user not being able to write to a directory or file.'
+  echo
+  echo 'Please check that the log directory is writable by the current user'
+  echo
+  echo '    ls -las /usr/local/var/log'
+  echo
+  echo 'If that directory is not writable then run'
+  echo
+  echo '  sudo chmod 0770 /usr/local/var/log'
+
+  exit 1
+}
+
+function db_exists {
+  psql  \
+    --username postgres \
+    --list \
+    --tuples-only \
+    --quiet \
+  | cut -d '|' -f 1 \
+  | sed -E -e 's/^[ ]*//' \
+  | grep -wq $DBNAME
+}
+
+function create_hibernate_db {
+  if db_exists $DBNAME; then
+    echo "Database $DBNAME already exists"
+    return 0
+  fi
+
+  createdb \
+    --username=postgres \
+    $DBNAME \
+    'A database to practice hibernate integration with'
+}
+
+function main {
+  ensure_macOS
+  cask_install postgres
+  initialize_postgres
+  start_postgres
+  create_hibernate_db
+}
+
+main

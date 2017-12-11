@@ -1,0 +1,113 @@
+buildscript {
+  ext.kotlin_version = '1.2.0'
+
+  repositories {
+    jcenter()
+    mavenCentral()
+  }
+
+  dependencies {
+    classpath(
+        group: 'org.jetbrains.kotlin',
+        name: 'kotlin-gradle-plugin',
+        version: kotlin_version
+    )
+    classpath(
+        group: 'org.springframework.boot',
+        name: 'spring-boot-gradle-plugin',
+        version: '1.5.9.RELEASE'
+    )
+  }
+}
+
+plugins {
+  id 'idea'
+  id 'org.jetbrains.kotlin.jvm' version '1.2.0'
+  id 'org.springframework.boot' version '1.5.9.RELEASE'
+}
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+compileKotlin {
+  kotlinOptions {
+    jvmTarget = "1.8"
+  }
+}
+compileTestKotlin {
+  kotlinOptions {
+    jvmTarget = "1.8"
+  }
+}
+
+repositories {
+  jcenter()
+  mavenCentral()
+}
+
+dependencies {
+  compile(
+      group: 'org.springframework.boot',
+      name: 'spring-boot-starter-data-jpa'
+  )
+
+  /*
+    Spring boot data jpa depends on the jaxb api.
+
+    jaxb api used to ship with Java 6/7/8 as part of Java EE. This has now been put into a module in Java 9. Either
+    the module needs to be activated to make it available on the classpath or declare it explicitly as a dependency.
+    It is more portable to declare the dependency explicitly.
+
+    See https://stackoverflow.com/questions/43574426/how-to-resolve-java-lang-noclassdeffounderror-javax-xml-bind-jaxbexception-in-j
+  */
+  compile(
+      group: 'javax.xml.bind',
+      name: 'jaxb-api',
+      version: '2.3.0'
+  )
+
+  compile(
+      group: 'org.jetbrains.kotlin',
+      name: 'kotlin-stdlib-jre8',
+      version: kotlin_version
+  )
+  compile(
+      group: 'org.jetbrains.kotlin',
+      name: 'kotlin-reflect',
+      version: kotlin_version
+  )
+  compile(
+      group: 'org.postgresql',
+      name: 'postgresql',
+      version: '42.1.4'
+  )
+  testCompile(
+      group: 'org.springframework.boot',
+      name: 'spring-boot-starter-test'
+  )
+  testCompile(
+      group: 'commons-io',
+      name: 'commons-io',
+      version: '2.6'
+  )
+}
+
+task postgres(type: Exec) {
+  outputs.files(
+      '.postgrespw',
+      'scr/main/resources/dbpassword.properties'
+  )
+  commandLine = './bootstrap'
+}
+
+test.dependsOn(postgres)
+
+bootRun {
+  dependsOn(postgres)
+
+  final dbPassword = file('.postgrespw').readLines().first()
+
+  args = [
+      "--spring.datasource.password=$dbPassword"
+  ]
+}

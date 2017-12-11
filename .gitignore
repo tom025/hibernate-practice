@@ -1,0 +1,7 @@
+*.iml
+.gradle
+build
+out
+
+.postgrespw
+src/test/resources/dbpassword.properties
